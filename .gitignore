@@ -20,6 +20,10 @@ eggs/
 lib/
 lib64/
 parts/
+
+# Exception: keep frontend lib (Next.js app code)
+!frontend/lib/
+!frontend/lib/**
 sdist/
 var/
 wheels/
