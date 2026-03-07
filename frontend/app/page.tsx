@@ -27,7 +27,7 @@ export default function Home() {
       
       {/* Main Canvas Area */}
       <div className="flex-1 overflow-hidden">
-        <ResizablePanelGroup direction="horizontal" className="h-full">
+        <ResizablePanelGroup className="h-full">
           {/* Left Panel - Wide Canvas (70% width) */}
           <ResizablePanel defaultSize={70} minSize={50}>
             <div className="h-full p-6">
