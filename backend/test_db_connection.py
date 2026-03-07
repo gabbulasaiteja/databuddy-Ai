@@ -11,16 +11,23 @@ from sqlalchemy.ext.asyncio import create_async_engine
 load_dotenv()
 
 
+def _get_database_url() -> str | None:
+    url = os.getenv("RUNSQL_URL") or os.getenv("DATABASE_URL")
+    if not url:
+        return None
+    if url.startswith("postgresql://") and "postgresql+asyncpg" not in url:
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
 async def test_connection() -> None:
     """Test the database connection."""
-    url = os.getenv("RUNSQL_URL")
+    url = _get_database_url()
     if not url:
-        raise ValueError("RUNSQL_URL is not set in the environment.")
-    
-    # Ensure we're using asyncpg driver
-    if not url.startswith("postgresql+asyncpg://"):
-        # Convert postgresql:// to postgresql+asyncpg://
-        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        raise ValueError(
+            "Neither RUNSQL_URL nor DATABASE_URL is set. "
+            "Set one of them (e.g. DATABASE_URL on Render)."
+        )
     
     # Remove SSL query parameters (asyncpg doesn't support sslmode in URL)
     url_clean = url.split('?')[0]

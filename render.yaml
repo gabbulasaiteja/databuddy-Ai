@@ -11,6 +11,9 @@ services:
     envVars:
       - key: PORT
         value: 8000
+      # Link your Render PostgreSQL in Dashboard → Environment → Add from "Postgres" to get DATABASE_URL
+      - key: DATABASE_URL
+        sync: false
       - key: RUNSQL_URL
         sync: false
       - key: GROQ_API_KEY

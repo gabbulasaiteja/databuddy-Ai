@@ -16,15 +16,28 @@ from services.query_tracker import query_tracker
 logger = logging.getLogger("databuddy")
 
 
+def _get_database_url() -> str | None:
+    """Resolve async PostgreSQL URL from RUNSQL_URL or DATABASE_URL (e.g. Render)."""
+    url = os.getenv("RUNSQL_URL") or os.getenv("DATABASE_URL")
+    if not url:
+        return None
+    if url.startswith("postgresql://") and "postgresql+asyncpg" not in url:
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
 class DBService:
     """
     Async SQLAlchemy-based DB execution and schema discovery service.
     """
 
     def __init__(self) -> None:
-        url = os.getenv("RUNSQL_URL")
+        url = _get_database_url()
         if not url:
-            raise RuntimeError("RUNSQL_URL is not set in the environment.")
+            raise RuntimeError(
+                "Neither RUNSQL_URL nor DATABASE_URL is set in the environment. "
+                "Set RUNSQL_URL (postgresql+asyncpg://...) or DATABASE_URL (postgresql://...) for Render."
+            )
         # Expect an async driver URL, e.g. postgresql+asyncpg://...
         # Remove SSL parameters from URL if present (asyncpg doesn't support sslmode)
         url_clean = url.split('?')[0]  # Remove query parameters

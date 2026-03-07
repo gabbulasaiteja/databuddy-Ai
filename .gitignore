@@ -1,11 +1,9 @@
-# Dependencies
-node_modules/
-.pnp
-.pnp.js
-.yarn/
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
+# Environment variables
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
 
 # Python
 __pycache__/
@@ -28,56 +26,41 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
-pip-log.txt
-pip-delete-this-directory.txt
 .venv/
 venv/
 ENV/
 env/
-.ENV
-.env
 
-# Next.js
+# Node
+node_modules/
 .next/
 out/
-build/
 dist/
-
-# Production
+build/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+.pnpm-debug.log*
 
-# Testing
-coverage/
-*.lcov
-.nyc_output
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# IDEs and Editors
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
-*.sublime-project
-*.sublime-workspace
 
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env*.local
+# Data
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
 
 # Vercel
 .vercel
@@ -87,31 +70,8 @@ htmlcov/
 next-env.d.ts
 
 # OS
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-Desktop.ini
+.DS_Store
 
 # Temporary files
 *.tmp
-*.temp
-*.bak
-*.cache
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Logs
-logs/
-*.log
-
-# Misc
-.cache/
-.temp/
-.tmp/
