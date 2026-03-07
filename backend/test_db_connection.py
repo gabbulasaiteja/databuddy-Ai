@@ -12,7 +12,7 @@ load_dotenv()
 
 
 def _get_database_url() -> str | None:
-    url = os.getenv("RUNSQL_URL") or os.getenv("DATABASE_URL")
+    url = os.getenv("DATABASE_URL")
     if not url:
         return None
     if url.startswith("postgresql://") and "postgresql+asyncpg" not in url:
@@ -25,16 +25,16 @@ async def test_connection() -> None:
     url = _get_database_url()
     if not url:
         raise ValueError(
-            "Neither RUNSQL_URL nor DATABASE_URL is set. "
-            "Set one of them (e.g. DATABASE_URL on Render)."
+            "DATABASE_URL is not set. "
+            "Set DATABASE_URL (e.g. from Render PostgreSQL service)."
         )
     
     # Remove SSL query parameters (asyncpg doesn't support sslmode in URL)
     url_clean = url.split('?')[0]
     
-    # Configure SSL for asyncpg (required for Neon)
+    # Configure SSL for asyncpg (Render PostgreSQL uses self-signed certs)
     connect_args = {
-        "ssl": True  # Neon requires SSL connections
+        "ssl": "require"  # Enable SSL but don't verify self-signed certificates (for Render)
     }
     
     print(f"Connecting to: {url_clean.split('@')[1] if '@' in url_clean else url_clean}")

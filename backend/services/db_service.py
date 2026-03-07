@@ -17,8 +17,8 @@ logger = logging.getLogger("databuddy")
 
 
 def _get_database_url() -> str | None:
-    """Resolve async PostgreSQL URL from RUNSQL_URL or DATABASE_URL (e.g. Render)."""
-    url = os.getenv("RUNSQL_URL") or os.getenv("DATABASE_URL")
+    """Resolve async PostgreSQL URL from DATABASE_URL (e.g. Render PostgreSQL)."""
+    url = os.getenv("DATABASE_URL")
     if not url:
         return None
     if url.startswith("postgresql://") and "postgresql+asyncpg" not in url:
@@ -35,17 +35,18 @@ class DBService:
         url = _get_database_url()
         if not url:
             raise RuntimeError(
-                "Neither RUNSQL_URL nor DATABASE_URL is set in the environment. "
-                "Set RUNSQL_URL (postgresql+asyncpg://...) or DATABASE_URL (postgresql://...) for Render."
+                "DATABASE_URL is not set in the environment. "
+                "Set DATABASE_URL (postgresql://...) - Render PostgreSQL provides this automatically when linked."
             )
         # Expect an async driver URL, e.g. postgresql+asyncpg://...
         # Remove SSL parameters from URL if present (asyncpg doesn't support sslmode)
         url_clean = url.split('?')[0]  # Remove query parameters
         
-        # Configure SSL for asyncpg (required for Neon)
-        # asyncpg uses 'ssl' parameter, not 'sslmode'
+        # Configure SSL for asyncpg
+        # For Render PostgreSQL (self-signed certs), use "require" to enable SSL without verification
+        # This allows connections to Render PostgreSQL which uses self-signed certificates
         connect_args = {
-            "ssl": True  # Neon requires SSL connections
+            "ssl": "require"  # Enable SSL but don't verify self-signed certificates (for Render)
         }
         
         self.engine: AsyncEngine = create_async_engine(
