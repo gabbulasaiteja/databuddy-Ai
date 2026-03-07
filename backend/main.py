@@ -55,7 +55,9 @@ logger.addHandler(handler)
 app = FastAPI(title="DataBuddy AI")
 
 # CORS configuration - use environment variable or default to frontend URL
-cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+cors_origins_str = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+cors_origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
+logger.info(f"CORS origins configured: {cors_origins}")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
