@@ -58,12 +58,25 @@ app = FastAPI(title="DataBuddy AI")
 cors_origins_str = os.getenv("CORS_ORIGINS", "http://localhost:3000")
 cors_origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
 logger.info(f"CORS origins configured: {cors_origins}")
+
+# Add middleware to log CORS-related headers for debugging
+@app.middleware("http")
+async def cors_logging_middleware(request: Request, call_next):
+    origin = request.headers.get("origin")
+    method = request.method
+    path = request.url.path
+    if method == "OPTIONS":
+        logger.info(f"OPTIONS preflight request: origin={origin}, path={path}, allowed_origins={cors_origins}")
+    response = await call_next(request)
+    return response
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
