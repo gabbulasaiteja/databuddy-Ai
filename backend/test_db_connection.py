@@ -33,8 +33,13 @@ async def test_connection() -> None:
     url_clean = url.split('?')[0]
     
     # Configure SSL for asyncpg (Render PostgreSQL uses self-signed certs)
+    import ssl
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+    
     connect_args = {
-        "ssl": "require"  # Enable SSL but don't verify self-signed certificates (for Render)
+        "ssl": ssl_context  # Enable SSL but don't verify self-signed certificates (for Render)
     }
     
     print(f"Connecting to: {url_clean.split('@')[1] if '@' in url_clean else url_clean}")

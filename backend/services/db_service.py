@@ -43,10 +43,14 @@ class DBService:
         url_clean = url.split('?')[0]  # Remove query parameters
         
         # Configure SSL for asyncpg
-        # For Render PostgreSQL (self-signed certs), use "require" to enable SSL without verification
-        # This allows connections to Render PostgreSQL which uses self-signed certificates
+        # For Render PostgreSQL (self-signed certs), create SSL context that doesn't verify certificates
+        import ssl
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        
         connect_args = {
-            "ssl": "require"  # Enable SSL but don't verify self-signed certificates (for Render)
+            "ssl": ssl_context  # Enable SSL but don't verify self-signed certificates (for Render)
         }
         
         self.engine: AsyncEngine = create_async_engine(
