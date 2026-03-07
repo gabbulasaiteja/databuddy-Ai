@@ -1,0 +1,35 @@
+services:
+  # Backend FastAPI Service
+  - type: web
+    name: databuddy-ai-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/schema
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: RUNSQL_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: CORS_ORIGINS
+        sync: false
+      - key: RATE_LIMIT_REQUESTS
+        value: 10
+      - key: RATE_LIMIT_WINDOW_SECONDS
+        value: 60
+      - key: QUERY_TIMEOUT
+        value: 10.0
+      - key: SELECT_LIMIT
+        value: 50
+      - key: AUTH_ENABLED
+        value: false
+      - key: ERROR_TRACKING_ENABLED
+        value: true
+      - key: ALERTING_ENABLED
+        value: true

@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "buildCommand": "cd databuddy-ai/frontend && npm install && npm run build",
+  "outputDirectory": "databuddy-ai/frontend/.next",
+  "devCommand": "cd databuddy-ai/frontend && npm run dev",
+  "installCommand": "cd databuddy-ai/frontend && npm install",
+  "framework": "nextjs"
+}
