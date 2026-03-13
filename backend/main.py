@@ -328,8 +328,22 @@ async def get_schema(
         await auth_service.get_api_key(api_key)
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ")
     raw_schema = await db_service.get_schema()
+    
+    # System tables that should be excluded from user-facing schema
+    system_tables = {
+        'query_history',
+        'rate_limits',
+        'query_metrics',
+        'errors',
+    }
+    
     tables: List[SchemaTable] = []
     for t in raw_schema.get("tables", []):
+        table_name = t.get("name", "")
+        # Skip system/internal service tables
+        if table_name.lower() in system_tables:
+            continue
+            
         columns = [
             SchemaColumn(
                 name=c["name"],
@@ -340,7 +354,7 @@ async def get_schema(
         ]
         tables.append(
             SchemaTable(
-                name=t["name"],
+                name=table_name,
                 description=t.get("description"),
                 columns=columns,
             )
