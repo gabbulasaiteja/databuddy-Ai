@@ -268,17 +268,11 @@ export const useAppStore = create<{
       const generatedSQL = res.sql ?? "";
       const isConversational = res.is_conversational || !generatedSQL;
       
+      // Only add user message, no system messages
       set((s) => ({
         messages: [
           ...s.messages,
           { role: "user", content: prompt },
-          {
-            role: "system",
-            content:
-              res.explanation ||
-              res.message ||
-              (isConversational ? "That doesn't appear to be a database query." : "SQL generated and executing..."),
-          },
         ],
         sql: generatedSQL,
         isTranslating: false,
@@ -309,22 +303,17 @@ export const useAppStore = create<{
             }
           }
         } catch (execError) {
-          const execMsg = execError instanceof Error ? execError.message : "Execution failed";
-          set((s) => ({
-            messages: [
-              ...s.messages,
-              { role: "system", content: `Execution error: ${execMsg}` },
-            ],
-          }));
+          // Don't add error messages to chatbot - errors are shown in execution logs
+          // Execution errors are already handled in doExecuteSQL
         }
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Translation failed";
+      // Only add user message, don't show error in chatbot
+      // Errors are handled elsewhere (toast notifications, execution logs)
       set((s) => ({
         messages: [
           ...s.messages,
           { role: "user", content: prompt },
-          { role: "system", content: msg },
         ],
         isTranslating: false,
       }));

@@ -58,32 +58,26 @@ export function Chatbot() {
         {/* Message History */}
         <ScrollArea className="flex-1 p-4 min-h-0">
             <div className="space-y-4">
-              {messages.length === 0 ? (
+              {messages.filter(msg => msg.role === "user").length === 0 ? (
                 <div className="text-center text-[#9CA3AF] py-8">
                   <div className="text-sm">Start a conversation with AI...</div>
                 </div>
               ) : (
-                messages.map((msg, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex ${
-                      msg.role === "user" ? "justify-start" : "justify-start"
-                    }`}
-                  >
+                messages
+                  .filter(msg => msg.role === "user")
+                  .map((msg, idx) => (
                     <div
-                      className={`max-w-[90%] ${
-                        msg.role === "user"
-                          ? "border-l-2 border-[#00E599] pl-3 py-1 text-[#EDEDED]"
-                          : "bg-[#0A0A0A] rounded px-3 py-2 text-[#EDEDED]"
-                      }`}
+                      key={idx}
+                      className="flex justify-start"
                     >
-                      <div className="text-xs font-medium mb-1 text-[#9CA3AF]">
-                        {msg.role === "user" ? "[User]" : "[System AI]"}
+                      <div className="max-w-[90%] border-l-2 border-[#00E599] pl-3 py-1 text-[#EDEDED]">
+                        <div className="text-xs font-medium mb-1 text-[#9CA3AF]">
+                          [User]
+                        </div>
+                        <div className="text-sm">{msg.content}</div>
                       </div>
-                      <div className="text-sm">{msg.content}</div>
                     </div>
-                  </div>
-                ))
+                  ))
               )}
               {isTranslating && (
                 <div className="flex justify-start">
