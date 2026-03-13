@@ -120,7 +120,18 @@ export const useAppStore = create<{
       const res = await fetchApi<{ tables: SchemaTable[] }>("/api/schema");
       const schema = res.tables ?? [];
       const tables = schema.map((t) => t.name);
+      const { selectedTable } = get();
+      
       set({ schema, tables, loadingSchema: false });
+      
+      // Auto-select first table if no table is selected and tables exist
+      if (!selectedTable && tables.length > 0) {
+        await get().selectTable(tables[0], 1);
+      }
+      // If selected table no longer exists, clear selection
+      else if (selectedTable && !tables.includes(selectedTable)) {
+        set({ selectedTable: null, previewRows: [], previewColumns: [] });
+      }
     } catch (e) {
       console.error("fetchSchema error:", e);
       set({ schema: [], tables: [], loadingSchema: false });
@@ -253,6 +264,10 @@ export const useAppStore = create<{
         method: "POST",
         body: JSON.stringify({ prompt, schema_context }),
       });
+      
+      const generatedSQL = res.sql ?? "";
+      const isConversational = res.is_conversational || !generatedSQL;
+      
       set((s) => ({
         messages: [
           ...s.messages,
@@ -262,12 +277,47 @@ export const useAppStore = create<{
             content:
               res.explanation ||
               res.message ||
-              (res.is_conversational ? "That doesn't appear to be a database query." : "SQL generated."),
+              (isConversational ? "That doesn't appear to be a database query." : "SQL generated and executing..."),
           },
         ],
-        sql: res.sql ?? "",
+        sql: generatedSQL,
         isTranslating: false,
       }));
+      
+      // Auto-execute SQL if it was generated and is not conversational
+      if (generatedSQL && !isConversational) {
+        try {
+          await get().executeSQL(generatedSQL, false);
+          // Refresh schema if needed (for CREATE/ALTER/DROP operations)
+          const sqlUpper = generatedSQL.toUpperCase();
+          if (sqlUpper.includes("CREATE") || sqlUpper.includes("ALTER") || sqlUpper.includes("DROP")) {
+            await get().fetchSchema();
+            // Auto-select the newly created table if it's a CREATE TABLE
+            if (sqlUpper.includes("CREATE TABLE")) {
+              const match = generatedSQL.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["']?(\w+)["']?/i);
+              if (match) {
+                const tableName = match[1];
+                // Wait a bit for the schema to update
+                setTimeout(async () => {
+                  await get().fetchSchema();
+                  const updatedTables = get().tables;
+                  if (updatedTables.includes(tableName)) {
+                    await get().selectTable(tableName, 1);
+                  }
+                }, 500);
+              }
+            }
+          }
+        } catch (execError) {
+          const execMsg = execError instanceof Error ? execError.message : "Execution failed";
+          set((s) => ({
+            messages: [
+              ...s.messages,
+              { role: "system", content: `Execution error: ${execMsg}` },
+            ],
+          }));
+        }
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Translation failed";
       set((s) => ({
@@ -296,16 +346,17 @@ export const useAppStore = create<{
     const base = getBaseUrl();
     const sampleSql = `
 CREATE TABLE IF NOT EXISTS products (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  category TEXT,
-  price REAL,
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  category VARCHAR(255),
+  price DECIMAL(10,2),
   stock INTEGER DEFAULT 0
 );
-INSERT OR IGNORE INTO products (name, category, price, stock) VALUES
+INSERT INTO products (name, category, price, stock) VALUES
   ('Widget A', 'Electronics', 29.99, 100),
   ('Widget B', 'Electronics', 49.99, 25),
-  ('Gadget X', 'Tools', 19.99, 200);
+  ('Gadget X', 'Tools', 19.99, 200)
+ON CONFLICT DO NOTHING;
 `.trim();
     set({ isExecuting: true });
     try {
