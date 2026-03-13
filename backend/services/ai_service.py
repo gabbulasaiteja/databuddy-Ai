@@ -16,6 +16,70 @@ from services.schema_optimizer import schema_optimizer
 logger = logging.getLogger("databuddy")
 
 
+def convert_sqlite_to_postgresql(sql: str) -> str:
+    """
+    Convert SQLite syntax to PostgreSQL syntax.
+    
+    Main conversions:
+    - INTEGER PRIMARY KEY AUTOINCREMENT → SERIAL PRIMARY KEY
+    - id INTEGER AUTOINCREMENT PRIMARY KEY → id SERIAL PRIMARY KEY
+    - id INTEGER AUTOINCREMENT → id SERIAL
+    """
+    if not sql:
+        return sql
+    
+    # Pattern 1: INTEGER PRIMARY KEY AUTOINCREMENT → SERIAL PRIMARY KEY
+    # Handles: id INTEGER PRIMARY KEY AUTOINCREMENT
+    sql = re.sub(
+        r'\bINTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT\b',
+        'SERIAL PRIMARY KEY',
+        sql,
+        flags=re.IGNORECASE
+    )
+    
+    # Pattern 2: column_name INTEGER AUTOINCREMENT PRIMARY KEY → column_name SERIAL PRIMARY KEY
+    # Handles: id INTEGER AUTOINCREMENT PRIMARY KEY
+    sql = re.sub(
+        r'\b(\w+)\s+INTEGER\s+AUTOINCREMENT\s+PRIMARY\s+KEY\b',
+        r'\1 SERIAL PRIMARY KEY',
+        sql,
+        flags=re.IGNORECASE
+    )
+    
+    # Pattern 3: column_name INTEGER AUTOINCREMENT → column_name SERIAL
+    # Handles: id INTEGER AUTOINCREMENT (without PRIMARY KEY)
+    sql = re.sub(
+        r'\b(\w+)\s+INTEGER\s+AUTOINCREMENT\b',
+        r'\1 SERIAL',
+        sql,
+        flags=re.IGNORECASE
+    )
+    
+    # Pattern 4: PRIMARY KEY AUTOINCREMENT → PRIMARY KEY
+    # Handles any remaining cases where AUTOINCREMENT follows PRIMARY KEY
+    sql = re.sub(
+        r'\bPRIMARY\s+KEY\s+AUTOINCREMENT\b',
+        'PRIMARY KEY',
+        sql,
+        flags=re.IGNORECASE
+    )
+    
+    # Pattern 5: Remove any remaining standalone AUTOINCREMENT
+    # This is a cleanup for any edge cases
+    sql = re.sub(
+        r'\bAUTOINCREMENT\b',
+        '',
+        sql,
+        flags=re.IGNORECASE
+    )
+    
+    # Clean up any double spaces and trim
+    sql = re.sub(r'\s+', ' ', sql)
+    sql = sql.strip()
+    
+    return sql
+
+
 def extract_sql_from_response(content: str) -> str:
     """
     Extract clean SQL from AI response, handling markdown code fences and other formatting.
@@ -292,6 +356,10 @@ class AIService:
             system_message = (
                 "You are a friendly database assistant helping users who have NO technical knowledge of SQL or databases.\n"
                 "Users will speak in simple, everyday English. Your job is to understand their intent and translate it to PostgreSQL SQL.\n\n"
+                "🚨 CRITICAL: You MUST generate PostgreSQL-compatible SQL ONLY. This is a PostgreSQL database, NOT SQLite.\n"
+                "🚨 NEVER use SQLite syntax like AUTOINCREMENT - use SERIAL instead.\n"
+                "🚨 For auto-incrementing primary keys, use: id SERIAL PRIMARY KEY (NOT INTEGER PRIMARY KEY AUTOINCREMENT)\n"
+                "🚨 PostgreSQL data types: SERIAL (auto-increment), VARCHAR(n), INTEGER, DECIMAL, BOOLEAN, DATE, TIMESTAMP, TEXT\n\n"
                 "CRITICAL - When to return 'NOT_A_DATABASE_QUERY':\n"
                 "ONLY return 'NOT_A_DATABASE_QUERY' for:\n"
                 "- Pure greetings: 'hello', 'hi', 'hey', 'good morning'\n"
@@ -395,7 +463,7 @@ class AIService:
                 {"role": "system", "content": system_message},
                 {
                     "role": "user",
-                    "content": f"The user said: '{prompt}'\n\nTranslate this simple English request into PostgreSQL SQL. If the user asks for multiple operations (like 'create table and add data'), generate ALL operations separated by semicolons (;). The user has no SQL knowledge, so interpret their intent naturally.\n\nIMPORTANT:\n- Output ONLY raw SQL without markdown code fences (no ```sql)\n- If the request mentions tables, data, rows, columns, or any database operation, you MUST generate SQL\n- ONLY return 'NOT_A_DATABASE_QUERY' for pure greetings/farewells like 'hello', 'thanks', 'bye' with NO database context\n- Requests like 'add data', 'add sample data', 'add rows', 'show tables' are ALWAYS database queries - generate SQL",
+                    "content": f"The user said: '{prompt}'\n\nTranslate this simple English request into PostgreSQL SQL. If the user asks for multiple operations (like 'create table and add data'), generate ALL operations separated by semicolons (;). The user has no SQL knowledge, so interpret their intent naturally.\n\nIMPORTANT:\n- Output ONLY raw SQL without markdown code fences (no ```sql)\n- If the request mentions tables, data, rows, columns, or any database operation, you MUST generate SQL\n- ONLY return 'NOT_A_DATABASE_QUERY' for pure greetings/farewells like 'hello', 'thanks', 'bye' with NO database context\n- Requests like 'add data', 'add sample data', 'add rows', 'show tables' are ALWAYS database queries - generate SQL\n- 🚨 CRITICAL: Use PostgreSQL syntax ONLY. Use SERIAL for auto-increment, NOT AUTOINCREMENT. Use SERIAL PRIMARY KEY, NOT INTEGER PRIMARY KEY AUTOINCREMENT.",
                 },
             ]
             
@@ -432,6 +500,9 @@ class AIService:
             # Layer 5: Extract and validate SQL
             try:
                 sql = extract_sql_from_response(content)
+                
+                # Convert SQLite syntax to PostgreSQL syntax
+                sql = convert_sqlite_to_postgresql(sql)
                 
                 # Validate extracted SQL
                 if not sql or len(sql.strip()) == 0:

@@ -1,51 +1,49 @@
 from __future__ import annotations
 
 import os
-import sqlite3
-import time
-from pathlib import Path
+from datetime import datetime
 from typing import Any, Dict, List
-
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 from dotenv import load_dotenv
+
+from services.db_connection import get_shared_engine
+
+load_dotenv()
 
 
 class HistoryService:
     """
-    SQLite-based persistent query history service.
+    PostgreSQL-based persistent query history service.
     """
 
     def __init__(self) -> None:
-        backend_root = Path(__file__).resolve().parents[1]
-        load_dotenv(backend_root / ".env")
+        self.engine = get_shared_engine()
+        self._initialized = False
 
-        # Create data directory if it doesn't exist
-        data_dir = backend_root / "data"
-        data_dir.mkdir(exist_ok=True)
+    async def _init_db(self) -> None:
+        """Initialize PostgreSQL tables if needed."""
+        async with AsyncSession(self.engine) as session:
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS query_history (
+                    id SERIAL PRIMARY KEY,
+                    user_id VARCHAR(255) DEFAULT 'default',
+                    prompt TEXT NOT NULL,
+                    sql_generated TEXT NOT NULL,
+                    success BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            await session.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_query_history_user_id ON query_history(user_id)
+            """))
+            await session.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_query_history_created_at ON query_history(created_at DESC)
+            """))
+            await session.commit()
+            self._initialized = True
 
-        db_path = os.getenv("HISTORY_DB_PATH", str(data_dir / "history.db"))
-        self.db_path = db_path
-        self._init_db()
-
-    def _init_db(self) -> None:
-        """Initialize the SQLite database and create tables if needed."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS queries (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT DEFAULT 'default',
-                prompt TEXT NOT NULL,
-                sql_generated TEXT NOT NULL,
-                success INTEGER DEFAULT 1,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
-        conn.commit()
-        conn.close()
-
-    def add_query(
+    async def add_query(
         self,
         prompt: str,
         sql: str,
@@ -53,39 +51,60 @@ class HistoryService:
         user_id: str = "default",
     ) -> int:
         """Add a query to the history."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute(
-            """
-            INSERT INTO queries (user_id, prompt, sql_generated, success, created_at)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (user_id, prompt, sql, 1 if success else 0, timestamp),
-        )
-        query_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        return query_id
+        await self._ensure_init()
+        async with AsyncSession(self.engine) as session:
+            result = await session.execute(
+                text("""
+                    INSERT INTO query_history (user_id, prompt, sql_generated, success, created_at)
+                    VALUES (:user_id, :prompt, :sql, :success, CURRENT_TIMESTAMP)
+                    RETURNING id
+                """),
+                {
+                    "user_id": user_id,
+                    "prompt": prompt,
+                    "sql": sql,
+                    "success": success,
+                }
+            )
+            query_id = result.scalar()
+            await session.commit()
+            return query_id
 
-    def get_history(self, limit: int = 20, user_id: str = "default") -> List[Dict[str, Any]]:
+    async def get_history(self, limit: int = 20, user_id: str = "default") -> List[Dict[str, Any]]:
         """Retrieve query history, most recent first."""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT id, prompt, sql_generated as sql, created_at as timestamp
-            FROM queries
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (user_id, limit),
-        )
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        await self._ensure_init()
+        async with AsyncSession(self.engine) as session:
+            result = await session.execute(
+                text("""
+                    SELECT id, prompt, sql_generated as sql, created_at as timestamp
+                    FROM query_history
+                    WHERE user_id = :user_id
+                    ORDER BY created_at DESC
+                    LIMIT :limit
+                """),
+                {"user_id": user_id, "limit": limit}
+            )
+            rows = result.fetchall()
+            return [
+                {
+                    "id": row[0],
+                    "prompt": row[1],
+                    "sql": row[2],
+                    "timestamp": row[3].isoformat() if hasattr(row[3], 'isoformat') else str(row[3]),
+                }
+                for row in rows
+            ]
+
+    async def _ensure_init(self) -> None:
+        """Ensure database is initialized."""
+        if not self._initialized:
+            try:
+                async with AsyncSession(self.engine) as session:
+                    await session.execute(text("SELECT 1 FROM query_history LIMIT 1"))
+                self._initialized = True
+            except Exception:
+                await self._init_db()
+                self._initialized = True
 
 
 history_service = HistoryService()

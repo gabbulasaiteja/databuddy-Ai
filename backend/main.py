@@ -54,6 +54,21 @@ logger.addHandler(handler)
 
 app = FastAPI(title="DataBuddy AI")
 
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize PostgreSQL tables for internal services on startup."""
+    try:
+        await history_service._init_db()
+        await rate_limit_service._init_db()
+        await performance_metrics._init_db()
+        if error_tracker.enabled:
+            await error_tracker._init_db()
+        logger.info("Internal service tables initialized successfully")
+    except Exception as e:
+        logger.error(f"Error initializing service tables: {e}")
+
+
 # CORS configuration - use environment variable or default to frontend URL
 cors_origins_str = os.getenv("CORS_ORIGINS", "http://localhost:3000")
 cors_origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
@@ -154,9 +169,9 @@ def get_client_ip(request: Request) -> str:
     return "unknown"
 
 
-def check_rate_limit(ip: str) -> bool:
+async def check_rate_limit(ip: str) -> bool:
     """Check if IP has exceeded rate limit using persistent storage."""
-    return rate_limit_service.check_rate_limit(
+    return await rate_limit_service.check_rate_limit(
         ip, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS
     )
 
@@ -196,8 +211,8 @@ async def metrics(
     if auth_service.auth_enabled:
         await auth_service.get_api_key(api_key)
     
-    perf_metrics = performance_metrics.get_metrics(hours=hours, query_type=query_type)
-    error_stats = error_tracker.get_error_stats(hours=hours)
+    perf_metrics = await performance_metrics.get_metrics(hours=hours, query_type=query_type)
+    error_stats = await error_tracker.get_error_stats(hours=hours)
     
     return {
         "timestamp": datetime.utcnow().isoformat(),
@@ -239,7 +254,7 @@ async def explain_query(
         }
     except Exception as e:
         logger.error(f"Error explaining query: {e}")
-        error_tracker.track_error(
+        await error_tracker.track_error(
             error_type=type(e).__name__,
             error_message=str(e),
             error_category="query_explanation",
@@ -349,7 +364,7 @@ async def translate(
     try:
         # Rate limiting check
         client_ip = get_client_ip(http_request)
-        if not check_rate_limit(client_ip):
+        if not await check_rate_limit(client_ip):
             raise HTTPException(
                 status_code=429,
                 detail=f"Rate limit exceeded. Maximum {RATE_LIMIT_REQUESTS} requests per {RATE_LIMIT_WINDOW_SECONDS} seconds.",
@@ -544,7 +559,7 @@ async def execute(
         
         # Record performance metrics
         exec_time_ms = exec_time * 1000
-        performance_metrics.record_query(
+        await performance_metrics.record_query(
             query_id=query_id,
             sql=request.sql[:500],
             query_type=query_type,
@@ -559,7 +574,7 @@ async def execute(
         
     except asyncio.CancelledError:
         logger.info(f"Query {query_id} was cancelled")
-        performance_metrics.record_query(
+        await performance_metrics.record_query(
             query_id=query_id,
             sql=request.sql[:500],
             query_type=query_type,
@@ -574,7 +589,7 @@ async def execute(
             detail="Query execution was cancelled.",
         )
     except TimeoutError as e:
-        performance_metrics.record_query(
+        await performance_metrics.record_query(
             query_id=query_id,
             sql=request.sql[:500],
             query_type=query_type,
@@ -593,7 +608,7 @@ async def execute(
         success = False
         
         # Track error
-        error_tracker.track_error(
+        await error_tracker.track_error(
             error_type=type(e).__name__,
             error_message=str(e),
             error_category="database_execution",
@@ -602,11 +617,11 @@ async def execute(
         )
         
         # Check error rate and alert if needed
-        error_stats = error_tracker.get_error_stats(hours=1)
+        error_stats = await error_tracker.get_error_stats(hours=1)
         if error_stats["total_errors"] > 0:
             alerting_service.check_error_rate(error_stats["total_errors"], time_window_hours=1)
         
-        performance_metrics.record_query(
+        await performance_metrics.record_query(
             query_id=query_id,
             sql=request.sql[:500],
             query_type=query_type,
@@ -622,7 +637,7 @@ async def execute(
         )
 
     # Store in persistent history
-    history_service.add_query(
+    await history_service.add_query(
         prompt=request.sql,  # In execute endpoint, prompt is the SQL itself
         sql=request.sql,
         success=success,
@@ -671,7 +686,7 @@ async def get_history(
     if auth_service.auth_enabled:
         await auth_service.get_api_key(api_key)
     """Retrieve query history from persistent storage."""
-    history_data = history_service.get_history(limit=limit)
+    history_data = await history_service.get_history(limit=limit)
     return [HistoryItem(**item) for item in history_data]
 
 
