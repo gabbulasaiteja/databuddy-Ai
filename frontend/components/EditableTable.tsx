@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Info, AlertTriangle, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Info, AlertTriangle, Search, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { useAppStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -171,6 +172,9 @@ export function EditableTable() {
     previewPage,
     previewPageSize,
     previewTotalRows,
+    isExecuting,
+    sql,
+    pendingQueryType,
   } = useAppStore();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -243,6 +247,30 @@ export function EditableTable() {
 
   const hasNoData = tables.length === 0 && !loadingPreview;
 
+  // Extract table names from DROP TABLE SQL for progress display
+  const getDroppedTables = useMemo(() => {
+    if (!isExecuting || !sql || !sql.toUpperCase().includes("DROP TABLE")) return [];
+    const matches = sql.match(/DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?["']?(\w+)["']?/gi);
+    return matches ? matches.map(m => {
+      const match = m.match(/(\w+)\s*$/i);
+      return match ? match[1] : null;
+    }).filter(Boolean) : [];
+  }, [isExecuting, sql]);
+
+  // Get operation type from SQL
+  const getOperationType = useMemo(() => {
+    if (!isExecuting || !sql) return null;
+    const sqlUpper = sql.toUpperCase();
+    if (sqlUpper.includes("DROP TABLE")) return "DROP";
+    if (sqlUpper.includes("TRUNCATE")) return "TRUNCATE";
+    if (sqlUpper.includes("DELETE")) return "DELETE";
+    if (sqlUpper.includes("CREATE TABLE")) return "CREATE";
+    if (sqlUpper.includes("ALTER TABLE")) return "ALTER";
+    if (sqlUpper.includes("INSERT")) return "INSERT";
+    if (sqlUpper.includes("UPDATE")) return "UPDATE";
+    return "EXECUTING";
+  }, [isExecuting, sql]);
+
   return (
     <TooltipProvider>
       <div className="h-full flex flex-col">
@@ -261,6 +289,49 @@ export function EditableTable() {
             </Tooltip>
           </div>
         </div>
+
+        {/* Execution Progress Indicator */}
+        {isExecuting && (
+          <div className="mb-4 p-4 border border-[#00E599] bg-[#0A0A0A] rounded-lg animate-pulse">
+            <div className="flex items-center gap-3 mb-3">
+              <Loader2 className="h-5 w-5 text-[#00E599] animate-spin" />
+              <div className="flex-1">
+                <div className="text-sm font-medium text-[#EDEDED] mb-1">
+                  {getOperationType === "DROP" && getDroppedTables.length > 0
+                    ? `Dropping ${getDroppedTables.length} table${getDroppedTables.length > 1 ? 's' : ''}...`
+                    : getOperationType === "TRUNCATE"
+                    ? "Clearing table data..."
+                    : getOperationType === "DELETE"
+                    ? "Deleting data..."
+                    : getOperationType === "CREATE"
+                    ? "Creating table..."
+                    : getOperationType === "ALTER"
+                    ? "Modifying table structure..."
+                    : getOperationType === "INSERT"
+                    ? "Inserting data..."
+                    : getOperationType === "UPDATE"
+                    ? "Updating data..."
+                    : "Executing SQL..."}
+                </div>
+                {getDroppedTables.length > 0 && (
+                  <div className="text-xs text-[#9CA3AF] mt-1">
+                    Tables: {getDroppedTables.join(", ")}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="relative h-1 w-full overflow-hidden rounded-full bg-[#262626]">
+              <div 
+                className="h-full absolute inset-0"
+                style={{
+                  width: '50%',
+                  animation: 'shimmer 1.5s ease-in-out infinite',
+                  background: 'linear-gradient(90deg, transparent, #00E599, transparent)',
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {hasNoData && (
           <div className="mb-4 p-4 border border-[#262626] bg-[#171717] rounded">

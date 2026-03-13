@@ -219,6 +219,18 @@ export const useAppStore = create<{
 
   doExecuteSQL: async (sql: string, useTransaction: boolean) => {
     set({ isExecuting: true, executionLogs: [] });
+    
+    // Clear preview if DROP operation (tables will be deleted)
+    const sqlUpper = sql.toUpperCase();
+    if (sqlUpper.includes("DROP TABLE")) {
+      set({
+        previewColumns: [],
+        previewRows: [],
+        previewTotalRows: null,
+        selectedTable: null,
+      });
+    }
+    
     try {
       const res = await fetchApi<ExecuteResponse>("/api/execute", {
         method: "POST",
@@ -234,7 +246,7 @@ export const useAppStore = create<{
         previewTotalRows: res.count ?? null,
       }));
       if (res.schema_refresh_required) {
-        get().fetchSchema();
+        await get().fetchSchema();
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Execution failed";

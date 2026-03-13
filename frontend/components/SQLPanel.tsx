@@ -14,10 +14,14 @@ export function SQLPanel() {
   const { sql, executionLogs, isExecuting } = useAppStore();
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedError, setCopiedError] = useState(false);
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [executionLogs]);
+
+  // Check if there are any errors in the logs
+  const hasError = executionLogs.some(log => log.startsWith("[❌]") || log.includes("error") || log.includes("Error") || log.includes("failed"));
 
   const handleCopySQL = async () => {
     if (!sql) return;
@@ -39,6 +43,22 @@ export function SQLPanel() {
       toast.success("Logs copied to clipboard");
     } else {
       toast.error("Failed to copy logs");
+    }
+  };
+
+  const handleCopyErrorDetails = async () => {
+    // Copy SQL + error logs for diagnosis
+    const errorLogs = executionLogs.filter(log => 
+      log.startsWith("[❌]") || log.includes("error") || log.includes("Error") || log.includes("failed")
+    );
+    const errorText = `SQL Query:\n${sql}\n\nError Details:\n${errorLogs.join("\n")}`;
+    const success = await copyToClipboard(errorText);
+    if (success) {
+      setCopiedError(true);
+      toast.success("Error details copied to clipboard");
+      setTimeout(() => setCopiedError(false), 2000);
+    } else {
+      toast.error("Failed to copy error details");
     }
   };
 
@@ -100,11 +120,36 @@ export function SQLPanel() {
               </Button>
             )}
           </div>
-          <Card className="h-full bg-[#171717] border-[#262626] p-4">
+          <Card className={`h-full bg-[#171717] border-[#262626] p-4 ${hasError ? 'border-red-500/50' : ''}`}>
             <ScrollArea className="h-full">
               <div className="code-font space-y-1 text-sm">
                 {executionLogs.length > 0 ? (
                   <>
+                    {hasError && sql && (
+                      <div className="mb-3 p-3 bg-red-500/10 border border-red-500/30 rounded">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-xs font-medium text-red-400">
+                            ⚠️ Execution Error Detected
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleCopyErrorDetails}
+                            className="h-6 px-2 text-red-400 hover:text-red-300 hover:bg-red-500/20"
+                          >
+                            {copiedError ? (
+                              <Check className="h-3 w-3 mr-1" />
+                            ) : (
+                              <Copy className="h-3 w-3 mr-1" />
+                            )}
+                            Copy Error Details
+                          </Button>
+                        </div>
+                        <div className="text-xs text-[#9CA3AF]">
+                          Click to copy SQL query and error details for diagnosis
+                        </div>
+                      </div>
+                    )}
                     {executionLogs.map((log, idx) => (
                       <div key={idx} className="text-[#EDEDED]">
                         {log.startsWith("[✅]") ? (
