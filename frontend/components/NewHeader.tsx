@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/dialog";
 
 export function NewHeader() {
-  const { tables, selectedTable, loadingSchema, selectTable, previewRows, previewColumns } = useAppStore();
+  const { tables, selectedTable, loadingSchema, selectTable, previewRows, previewColumns, resetDatabase } = useAppStore();
   const [databaseName] = useState("Sample_Inventory");
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -74,16 +74,22 @@ export function NewHeader() {
   };
 
   const handleResetDB = async () => {
-    if (!confirm("Are you sure you want to reset the database? This will delete all data.")) {
+    if (tables.length === 0) {
+      toast.info("No tables to reset");
       return;
     }
-
-    try {
-      // This would need a backend endpoint
-      toast.info("Reset DB functionality needs backend implementation");
-    } catch (error) {
-      toast.error("Failed to reset database");
+    
+    // System tables that won't be deleted
+    const systemTables = ['query_history', 'rate_limits', 'query_metrics', 'errors'];
+    const userTables = tables.filter(t => !systemTables.includes(t.toLowerCase()));
+    
+    if (userTables.length === 0) {
+      toast.info("No user tables to reset");
+      return;
     }
+    
+    // Reset will trigger confirmation dialog via executeSQL
+    await resetDatabase();
   };
 
   return (

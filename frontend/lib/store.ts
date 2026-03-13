@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { fetchApi, getBaseUrl } from "./api";
+import { toast } from "sonner";
 
 export interface SchemaColumn {
   name: string;
@@ -93,6 +94,9 @@ export const useAppStore = create<{
 
   // Sample data
   populateSampleData: () => Promise<void>;
+
+  // Reset DB
+  resetDatabase: () => Promise<void>;
 }>((set, get) => ({
   schema: [],
   tables: [],
@@ -237,6 +241,15 @@ export const useAppStore = create<{
         body: JSON.stringify({ sql, use_transaction: useTransaction }),
       });
       const logs = res.execution_logs ?? [];
+      
+      // Check if DROP operation was successful
+      const wasDropOperation = sqlUpper.includes("DROP TABLE");
+      const dropSuccessful = logs.some(log => 
+        log.toLowerCase().includes("success") || 
+        log.toLowerCase().includes("dropped") ||
+        log.toLowerCase().includes("executed")
+      );
+      
       set((s) => ({
         sql,
         executionLogs: [...s.executionLogs, ...logs],
@@ -245,8 +258,18 @@ export const useAppStore = create<{
         previewRows: res.rows ?? [],
         previewTotalRows: res.count ?? null,
       }));
+      
       if (res.schema_refresh_required) {
+        // Refresh schema after DDL operations
         await get().fetchSchema();
+        
+        // If DROP operation, ensure selected table is cleared if it was dropped
+        if (wasDropOperation) {
+          const { selectedTable, tables } = get();
+          if (selectedTable && !tables.includes(selectedTable)) {
+            set({ selectedTable: null });
+          }
+        }
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Execution failed";
@@ -373,5 +396,36 @@ ON CONFLICT DO NOTHING;
     } finally {
       set({ isExecuting: false });
     }
+  },
+
+  resetDatabase: async () => {
+    const { schema, tables } = get();
+    
+    // System tables that should NOT be dropped
+    const systemTables = new Set([
+      'query_history',
+      'rate_limits',
+      'query_metrics',
+      'errors',
+    ]);
+    
+    // Get only user tables (exclude system tables)
+    const userTables = tables.filter(table => !systemTables.has(table.toLowerCase()));
+    
+    if (userTables.length === 0) {
+      toast.info("No user tables to delete");
+      return;
+    }
+    
+    // Generate DROP TABLE statements for all user tables
+    // Use CASCADE to handle foreign key constraints
+    // Join with newlines and ensure each statement ends with semicolon
+    const dropStatements = userTables.map(table => 
+      `DROP TABLE IF EXISTS "${table}" CASCADE`
+    ).join(';\n') + ';';
+    
+    // Execute via executeSQL which will trigger confirmation dialog
+    // This will show the confirmation dialog with the SQL
+    await get().executeSQL(dropStatements, false);
   },
 }));
